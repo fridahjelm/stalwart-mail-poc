@@ -119,6 +119,15 @@ fi
 # to a real domain would be delivered over the internet.
 SW update MtaOutboundStrategy --json '{"route":{"match":{"0":{"if":"is_local_domain(rcpt_domain)","then":"'"'"'local'"'"'"}},"else":"'"'"'sink'"'"'"}}'
 
+# A room receives every invitation, update and cancellation for it from the
+# whole domain, and the stock limit of 25 an hour per sender domain and
+# recipient queues the rest for retry, so the room answers them late or after
+# the meeting was already deleted. Read at startup only.
+echo "==> no sender-to-recipient throttle for room-* accounts"
+THROTTLE_ID=$(pick_id MtaInboundThrottle description 'Sender address to recipient throttle')
+[ -z "$THROTTLE_ID" ] || SW update MtaInboundThrottle "$THROTTLE_ID" \
+	--json '{"match":{"match":{"0":{"if":"starts_with(rcpt, '"'"'room-'"'"')","then":"false"}},"else":"true"}}'
+
 echo "==> accounts"
 # No local password: once the OIDC directory is attached Stalwart refuses to
 # set one ("Cannot set credentials for accounts in an external directory").
@@ -131,6 +140,10 @@ mk_account() { # <local part> <domain id>
 mk_account alice "$DOM_PRIMARY"
 mk_account bob   "$DOM_PRIMARY"
 mk_account carol "$DOM_OTHER"
+# Meeting rooms. Nobody signs in as them; the booking service answers their
+# invitations with the app passwords from 37-room-passwords.sh.
+mk_account room-a "$DOM_PRIMARY"
+mk_account room-b "$DOM_PRIMARY"
 
 echo "==> Keycloak OIDC directory"
 if [ -z "$(pick_id Directory description 'Keycloak lab realm')" ]; then

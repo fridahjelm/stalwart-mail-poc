@@ -3,3 +3,4 @@ app-passwords.txt
 certs/
 dns/zones/lab.internal.zone
 __pycache__/
+booking-passwords.txt
