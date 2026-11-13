@@ -257,6 +257,14 @@ the same server and has no setting to stop it.
 - The Prometheus endpoint has no authentication; anyone who can reach
   `mail.lab.internal` on 443 can read it.
 
+## Licences
+
+The booking service in `booking/` is licensed under the EUPL-1.2 (see
+`booking/LICENSE` and `booking/NOTICE`). The rest of this repository has no
+licence yet. The licences of the projects the lab runs, and of what goes into
+the booking image, are in `LICENSES/`, with an index in
+`LICENSES/README.md`.
+
 ## Teardown
 
 ```bash
