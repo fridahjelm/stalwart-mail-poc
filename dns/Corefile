@@ -1,0 +1,12 @@
+lab.internal:53 {
+	file /etc/coredns/zones/lab.internal.zone
+	log
+	errors
+}
+
+.:53 {
+	forward . 1.1.1.1 9.9.9.9
+	cache 30
+	log
+	errors
+}

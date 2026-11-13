@@ -1,0 +1,58 @@
+{
+	auto_https off
+	# Only TCP 443 is published to the host, so advertising HTTP/3 would make
+	# browsers try QUIC over a UDP port that is not there; a cross-origin
+	# fetch then fails while plain navigation still works.
+	servers {
+		protocols h1 h2
+	}
+}
+
+(labtls) {
+	tls /certs/lab.pem /certs/lab-key.pem
+	log
+}
+
+https://kc.lab.internal {
+	import labtls
+	reverse_proxy https://172.28.0.20:8443 {
+		transport http {
+			tls_trusted_ca_certs /certs/rootCA.pem
+			tls_server_name kc.lab.internal
+		}
+	}
+}
+
+https://webmail.lab.internal {
+	import labtls
+	reverse_proxy http://172.28.0.41:3000
+}
+
+https://mail.lab.internal {
+	import labtls
+
+	# The webmail is a different origin, so the browser needs CORS headers on
+	# the JMAP endpoint. Stalwart's own switch only allows every origin, so the
+	# allowlist lives here and Stalwart's usePermissiveCors stays off.
+	@webmail header Origin https://webmail.lab.internal
+	header @webmail {
+		Access-Control-Allow-Origin "https://webmail.lab.internal"
+		Access-Control-Allow-Methods "GET, POST, PATCH, PUT, DELETE, HEAD, OPTIONS"
+		Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Requested-With"
+		Access-Control-Max-Age "600"
+		Vary Origin
+	}
+
+	@preflight {
+		method OPTIONS
+		header Origin https://webmail.lab.internal
+	}
+	respond @preflight 204
+
+	reverse_proxy https://172.28.0.30:443 {
+		transport http {
+			tls_trusted_ca_certs /certs/rootCA.pem
+			tls_server_name mail.lab.internal
+		}
+	}
+}

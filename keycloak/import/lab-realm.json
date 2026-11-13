@@ -1,0 +1,163 @@
+{
+  "realm": "lab",
+  "enabled": true,
+  "displayName": "Mail lab",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "accessTokenLifespan": 1800,
+  "groups": [
+    {
+      "name": "mail-users"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "bulwark",
+      "name": "Bulwark webmail",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "bulwark-lab-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://webmail.lab.internal/*"
+      ],
+      "webOrigins": [
+        "https://webmail.lab.internal"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://webmail.lab.internal/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "stalwart-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "stalwart",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "imap-client",
+      "name": "IMAP client (OAUTHBEARER, optional)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "https://localhost/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "stalwart-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "stalwart",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "alice@lab.internal",
+      "firstName": "Alice",
+      "lastName": "Andersson",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "labdemo123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/mail-users"
+      ]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "bob@lab.internal",
+      "firstName": "Bob",
+      "lastName": "Bergstr\u00f6m",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "labdemo123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/mail-users"
+      ]
+    },
+    {
+      "username": "carol",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "carol@other.lab.internal",
+      "firstName": "Carol",
+      "lastName": "Carlsson",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "labdemo123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/mail-users"
+      ]
+    }
+  ]
+}

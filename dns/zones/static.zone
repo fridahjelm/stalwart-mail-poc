@@ -1,0 +1,18 @@
+; Static part of the lab zone. scripts/40-dns-sync.sh copies this file and
+; appends the records Stalwart generates for each domain (DKIM, DMARC, MX,
+; SRV, MTA-STS, TLSA), producing lab.internal.zone.
+;
+; The HTTPS names point at Caddy so that every URL is the same string inside
+; the lab network as it is in the browser. mail.lab.internal is the exception:
+; it must be Stalwart itself for SMTP, IMAP and ManageSieve, and Stalwart
+; serves JMAP on 443 there directly.
+$ORIGIN lab.internal.
+$TTL 60
+@       IN SOA  ns.lab.internal. postmaster.lab.internal. ( 1 60 60 86400 60 )
+@       IN NS   ns.lab.internal.
+
+ns      IN A    172.28.0.5
+kc      IN A    172.28.0.40
+webmail IN A    172.28.0.40
+mail    IN A    172.28.0.30
+sink    IN A    172.28.0.50

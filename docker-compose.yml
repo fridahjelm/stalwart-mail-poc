@@ -1,0 +1,176 @@
+name: mail-poc
+
+networks:
+  lab:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  postgres-data:
+  stalwart-etc:
+  stalwart-data:
+  bulwark-data:
+  caddy-data:
+
+services:
+  # CoreDNS rather than dnsmasq: it serves a BIND zone file, so the DKIM,
+  # DMARC, MTA-STS, SRV and TLSA records Stalwart generates can be published
+  # verbatim instead of being translated into a smaller record set.
+  dns:
+    image: coredns/coredns:1.12.0
+    container_name: lab-dns
+    restart: unless-stopped
+    command: ["-conf", "/etc/coredns/Corefile"]
+    volumes:
+      - ./dns/Corefile:/etc/coredns/Corefile:ro
+      - ./dns/zones:/etc/coredns/zones:ro
+    ports:
+      - "127.0.0.1:15353:53/udp"
+      - "127.0.0.1:15353:53/tcp"
+    networks:
+      lab:
+        ipv4_address: 172.28.0.5
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: lab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      lab:
+        ipv4_address: 172.28.0.10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    container_name: lab-keycloak
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["start", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://172.28.0.10:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME: https://kc.lab.internal
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTPS_CERTIFICATE_FILE: /certs/lab.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /certs/lab-key.pem
+      KC_HTTP_ENABLED: "false"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./certs:/certs:ro
+      - ./keycloak/import:/opt/keycloak/data/import:ro
+    networks:
+      lab:
+        ipv4_address: 172.28.0.20
+
+  stalwart:
+    image: stalwartlabs/stalwart:v1
+    container_name: lab-stalwart
+    restart: unless-stopped
+    init: true
+    depends_on: [dns]
+    # dnsmasq is authoritative for lab.internal and forwards the rest. This
+    # replaces Docker's embedded resolver, so every name Stalwart needs must
+    # exist in dnsmasq/lab.conf.
+    dns: [172.28.0.5]
+    volumes:
+      - stalwart-etc:/etc/stalwart
+      - stalwart-data:/var/lib/stalwart
+      - ./stalwart/etc/config.json:/etc/stalwart/config.json:ro
+      - ./certs:/certs:ro
+    environment:
+      STALWART_RECOVERY_ADMIN: admin:${STALWART_ADMIN_PASSWORD}
+      # Public roots plus the lab CA, so Stalwart can validate Keycloak's
+      # certificate instead of skipping verification. Built by scripts/15-ca-bundle.sh.
+      SSL_CERT_FILE: /certs/ca-bundle.pem
+    ports:
+      - "127.0.0.1:25:25"
+      - "127.0.0.1:143:143"
+      - "127.0.0.1:465:465"
+      - "127.0.0.1:587:587"
+      - "127.0.0.1:993:993"
+      - "127.0.0.1:4190:4190"
+      - "127.0.0.1:8080:8080"
+    networks:
+      lab:
+        ipv4_address: 172.28.0.30
+        aliases: [mail.lab.internal]
+
+  bulwark:
+    image: ghcr.io/bulwarkmail/webmail:latest
+    container_name: lab-bulwark
+    restart: unless-stopped
+    depends_on: [stalwart]
+    dns: [172.28.0.5]
+    environment:
+      # Node ships its own root store, so without this it rejects Stalwart's
+      # lab certificate and the setup wizard cannot verify the JMAP endpoint.
+      NODE_EXTRA_CA_CERTS: /certs/rootCA.pem
+    volumes:
+      - bulwark-data:/app/data
+      - ./certs:/certs:ro
+    networks:
+      lab:
+        ipv4_address: 172.28.0.41
+
+  # Terminates TLS for every HTTPS name, so one host port serves all of them
+  # and the URLs are identical inside and outside the lab network.
+  caddy:
+    image: caddy:2-alpine
+    container_name: lab-caddy
+    restart: unless-stopped
+    depends_on: [keycloak, bulwark]
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro
+      - caddy-data:/data
+    ports:
+      - "127.0.0.1:443:443"
+    networks:
+      lab:
+        ipv4_address: 172.28.0.40
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: lab-mailpit
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks:
+      lab:
+        ipv4_address: 172.28.0.50
+        aliases: [sink.lab.internal]
+
+  # Not started by `up`. Use scripts/stalwart-cli.sh.
+  cli:
+    image: ghcr.io/stalwartlabs/cli:latest
+    profiles: [tools]
+    dns: [172.28.0.5]
+    environment:
+      STALWART_URL: http://mail.lab.internal:8080
+      STALWART_USER: admin
+      STALWART_PASSWORD: ${STALWART_ADMIN_PASSWORD}
+    volumes:
+      - ./stalwart:/work
+      - ./certs:/certs:ro
+    networks:
+      lab: {}
