@@ -120,13 +120,15 @@ fi
 SW update MtaOutboundStrategy --json '{"route":{"match":{"0":{"if":"is_local_domain(rcpt_domain)","then":"'"'"'local'"'"'"}},"else":"'"'"'sink'"'"'"}}'
 
 # A room receives every invitation, update and cancellation for it from the
-# whole domain, and the stock limit of 25 an hour per sender domain and
-# recipient queues the rest for retry, so the room answers them late or after
-# the meeting was already deleted. Read at startup only.
+# whole domain, and its replies and decline reasons all come from one domain
+# too. The stock limit of 25 an hour per sender domain and recipient queues
+# the rest for retry, so answers arrive late or after the meeting was already
+# deleted, and the booking service's decline mail is refused outright. Read
+# at startup only.
 echo "==> no sender-to-recipient throttle for room-* accounts"
 THROTTLE_ID=$(pick_id MtaInboundThrottle description 'Sender address to recipient throttle')
 [ -z "$THROTTLE_ID" ] || SW update MtaInboundThrottle "$THROTTLE_ID" \
-	--json '{"match":{"match":{"0":{"if":"starts_with(rcpt, '"'"'room-'"'"')","then":"false"}},"else":"true"}}'
+	--json '{"match":{"match":{"0":{"if":"starts_with(rcpt, '"'"'room-'"'"') || starts_with(sender, '"'"'room-'"'"')","then":"false"}},"else":"true"}}'
 
 echo "==> accounts"
 # No local password: once the OIDC directory is attached Stalwart refuses to

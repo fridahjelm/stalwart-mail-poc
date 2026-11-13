@@ -215,10 +215,11 @@ What the service works around, all observed on Stalwart 1.1:
 - **Cancelled copies stay.** A cancelled meeting stays in the room's
   calendar with `STATUS:CANCELLED`; the service deletes it.
 - **The inbound throttle.** Stalwart's stock rule allows 25 messages an hour
-  per sender domain and recipient, and queues the rest for retry. For a room
-  that means invitations and cancellations from the whole domain arriving
-  late, after the meeting was moved or deleted. The bootstrap exempts
-  `room-*` recipients from that rule; the per-IP rule still applies.
+  per sender domain and recipient. Over the limit, some messages are queued
+  for retry and arrive late, after the meeting was moved or deleted; a room's
+  iTIP reply was dropped instead, and the service's decline mail refused
+  with `452`. The bootstrap exempts messages to and from `room-*` accounts
+  from that rule; the per-IP rule still applies.
 
 Organizers get two messages for a decline (Stalwart's reply and the reason)
 and one for an accept. Stalwart sends its iTIP reply even between accounts on
