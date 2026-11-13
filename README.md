@@ -259,11 +259,10 @@ the same server and has no setting to stop it.
 
 ## Licences
 
-The booking service in `booking/` is licensed under the EUPL-1.2 (see
-`booking/LICENSE` and `booking/NOTICE`). The rest of this repository has no
-licence yet. The licences of the projects the lab runs, and of what goes into
-the booking image, are in `LICENSES/`, with an index in
-`LICENSES/README.md`.
+This repository is licensed under the EUPL-1.2 (see `LICENSE` and `NOTICE`),
+the booking service included. The exception is `LICENSES/`, which holds the
+licences of the projects the lab runs and of what goes into the booking
+image, with an index in `LICENSES/README.md`.
 
 ## Teardown
 

@@ -1,0 +1,11 @@
+stalwart-mail-poc, a lab setup of Keycloak, Stalwart and Bulwark
+Copyright (C) 2026 the stalwart-mail-poc authors
+
+Licensed under the European Union Public Licence v. 1.2 (EUPL-1.2); the
+text is in LICENSE. As Article 5 of the licence provides, copies may also be
+distributed under a later version of the EUPL.
+
+This covers everything in this repository except the files in LICENSES/,
+which are the licence texts of other projects and belong to their authors.
+The software the lab runs is not part of this repository; its licences are
+listed in LICENSES/README.md.

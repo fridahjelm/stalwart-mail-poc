@@ -42,8 +42,9 @@ Notes:
 
 ## The booking service
 
-`booking/` is this repository's own code, licensed under the EUPL-1.2; see
-`booking/LICENSE` and `booking/NOTICE`. What its build puts into the image:
+`booking/` is this repository's own code, licensed under the EUPL-1.2 like
+the rest of the repository; see `booking/LICENSE` and `booking/NOTICE`. What
+its build puts into the image:
 
 | Part | Version | Licence (SPDX) | File here | Fetched from |
 |---|---|---|---|---|
