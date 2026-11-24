@@ -108,8 +108,12 @@ def main():
         report("overlapping slot declined", got == "DECLINED", got)
 
         print("capacity")
-        guests = ["alice@lab.internal", "vera@lab.internal", "chris@lab.internal",
-                  "philippe@lab.internal", "carol@other.lab.internal"]
+        # Plus-addressed so that the count exceeds the room's capacity using
+        # only the accounts the bootstrap creates; the room answers on the
+        # number of attendees, not on whether they exist.
+        guests = ["alice@lab.internal", "carol@other.lab.internal",
+                  "alice+one@lab.internal", "alice+two@lab.internal",
+                  "alice+three@lab.internal"]
         over = book("room-b@lab.internal", f"{DAY}T140000Z", f"{DAY}T150000Z", guests)
         created.append(over)
         got = answer(over, "room-b@lab.internal")
