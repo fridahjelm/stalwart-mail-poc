@@ -1,12 +1,12 @@
 # Licences of the components
 
 The lab runs other projects' software. This folder holds each project's own
-licence files, fetched from its repository at the version the lab ran on
-13 November 2026, so that the terms can be checked without looking them up.
+licence files, fetched from its repository at the version the lab runs, so
+that the terms can be checked without looking them up. Last checked
+24 November 2026.
 
-This repository does not redistribute any of these projects. The containers
-are pulled from their publishers' registries, and the booking image is built
-locally from `booking/Dockerfile`. Most obligations in these licences apply
+This repository does not redistribute any of these projects; the containers
+are pulled from their publishers' registries. Most obligations in these licences apply
 when the software is distributed or offered to users, which matters for a
 production deployment or for publishing an image built here.
 
@@ -14,9 +14,9 @@ production deployment or for publishing an image built here.
 
 | Component | Version | Licence (SPDX) | Files here | Fetched from |
 |---|---|---|---|---|
-| Stalwart mail server | 1.1 | `AGPL-3.0-only OR LicenseRef-SEL` | [stalwart/](stalwart/) | `stalwartlabs/stalwart` @ `e7cde9b` |
+| Stalwart mail server | 1.2.0 | `AGPL-3.0-only OR LicenseRef-SEL` | [stalwart/](stalwart/) | `stalwartlabs/stalwart` @ `b2d3df9` |
 | Stalwart CLI (tooling) | 1.0.14 | `AGPL-3.0-only OR LicenseRef-SEL` | [stalwart-cli/](stalwart-cli/) | `stalwartlabs/cli` @ `c108341` |
-| Bulwark webmail | 1.21.2 | `AGPL-3.0-only`, with an app-store permission | [bulwark/](bulwark/) | `bulwarkmail/webmail` @ `933bc18` |
+| Bulwark webmail | 1.21.3 | `AGPL-3.0-only`, with an app-store permission | [bulwark/](bulwark/) | `bulwarkmail/webmail` @ `4ed6c41` |
 | Keycloak | 26.4.7 | `Apache-2.0` | [keycloak/](keycloak/) | `keycloak/keycloak` @ `26.4.7` |
 | PostgreSQL | 17.12 | `PostgreSQL` | [postgresql/](postgresql/) | `postgres/postgres` @ `REL_17_12` |
 | Caddy | 2.11.9 | `Apache-2.0` | [caddy/](caddy/) | `caddyserver/caddy` @ `v2.11.9` |
@@ -39,30 +39,3 @@ Notes:
 - The other images (Keycloak, PostgreSQL, Caddy, Mailpit) contain operating
   system packages of their own, under their publishers' terms; they are not
   listed here.
-
-## The booking service
-
-`booking/` is this repository's own code, licensed under the EUPL-1.2 like
-the rest of the repository; see `booking/LICENSE` and `booking/NOTICE`. What
-its build puts into the image:
-
-| Part | Version | Licence (SPDX) | File here | Fetched from |
-|---|---|---|---|---|
-| Go standard library, compiled into the binary | 1.23.12 | `BSD-3-Clause` | [go/LICENSE](go/LICENSE) | `golang/go` @ `go1.23.12` |
-| BusyBox (`busybox`, `busybox-binsh`, `ssl_client`) | 1.36.1 | `GPL-2.0-only` | [alpine/busybox-LICENSE](alpine/busybox-LICENSE) | `mirror/busybox` @ `1_36_1` |
-| musl (`musl`, `musl-utils`) | 1.2.5 | `MIT`; `musl-utils` adds `BSD-2-Clause` and `GPL-2.0-or-later` parts | [alpine/musl-COPYRIGHT](alpine/musl-COPYRIGHT) | git.musl-libc.org @ `v1.2.5` |
-| OpenSSL (`libcrypto3`, `libssl3`) | 3.3.7 | `Apache-2.0` | [alpine/openssl-LICENSE.txt](alpine/openssl-LICENSE.txt) | `openssl/openssl` @ `openssl-3.3.7` |
-| zlib | 1.3.2 | `Zlib` | [alpine/zlib-LICENSE](alpine/zlib-LICENSE) | `madler/zlib` @ `v1.3.2` |
-| pax-utils (`scanelf`) | 1.3.7 | `GPL-2.0-only` | [alpine/pax-utils-COPYING](alpine/pax-utils-COPYING) | `gentoo/pax-utils` @ `v1.3.7` |
-| apk-tools | 2.14.4 | `GPL-2.0-only` | [alpine/apk-tools-LICENSE](alpine/apk-tools-LICENSE) | gitlab.alpinelinux.org `alpine/apk-tools` @ `v2.14.4` |
-| ca-certificates-bundle | 20260413 | `MPL-2.0 AND MIT` | [alpine/ca-certificates-MPL-2.0.txt](alpine/ca-certificates-MPL-2.0.txt) | SPDX licence list @ `v3.29.0` |
-| alpine-baselayout, alpine-keys | 3.6.5, 2.4 | `GPL-2.0-only`, `MIT` | (no upstream file) | — |
-
-The base image is Alpine Linux 3.20.10; the package licences are the ones
-`apk list --installed` reports in the built image. Alpine's ca-certificates
-repository has no licence file: its certificate data is Mozilla's
-`certdata.txt` under MPL-2.0, whose canonical text is included instead. The
-GPL-2.0 packages oblige whoever distributes the image to offer their source,
-which Alpine publishes; building locally, as the lab does, triggers nothing.
-The binary is static, so a `scratch` or distroless base would remove every
-package in this table except the Go standard library.

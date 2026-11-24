@@ -15,17 +15,17 @@ which Stalwart verifies itself. See [Authentication paths](#authentication-paths
 | `lab-dns` | `coredns/coredns:1.12.0` | 172.28.0.5 | `127.0.0.1:15353/udp` |
 | `lab-postgres` | `postgres:17-alpine` | 172.28.0.10 | no |
 | `lab-keycloak` | `quay.io/keycloak/keycloak:26.4` | 172.28.0.20 | via Caddy |
-| `lab-stalwart` | `stalwartlabs/stalwart:v1` | 172.28.0.30 | mail ports on 127.0.0.1 |
+| `lab-stalwart` | `stalwartlabs/stalwart:v1.2.0` | 172.28.0.30 | mail ports on 127.0.0.1 |
 | `lab-caddy` | `caddy:2-alpine` | 172.28.0.40 | `127.0.0.1:443` |
-| `lab-bulwark` | `ghcr.io/bulwarkmail/webmail` | 172.28.0.41 | via Caddy |
+| `lab-bulwark` | `ghcr.io/bulwarkmail/webmail:1.21.3` | 172.28.0.41 | via Caddy |
 | `lab-mailpit` | `axllent/mailpit` | 172.28.0.50 | `127.0.0.1:8025` |
-| `lab-booking` | built from `booking/` | 172.28.0.60 | no |
 
 Names: `kc.lab.internal` (Keycloak), `mail.lab.internal` (Stalwart),
 `webmail.lab.internal` (Bulwark), `sink.lab.internal` (Mailpit).
 Mail domains: `lab.internal` and `other.lab.internal`.
 Users: `alice@lab.internal`, `bob@lab.internal`, `carol@other.lab.internal`.
-Meeting rooms: `room-a@lab.internal` (8 seats), `room-b@lab.internal` (4 seats).
+Meeting rooms: `room-a@lab.internal` (8 seats, 1st floor) and
+`room-b@lab.internal` (4 seats, 2nd floor), both resource accounts.
 
 ## DNS and TLS
 
@@ -75,16 +75,33 @@ is given the lab CA rather than having verification turned off:
 ./scripts/30-stalwart-bootstrap.sh # domains, listeners, accounts, OIDC directory
 docker compose restart stalwart    # listeners, the outbound route, directory queries, metrics and throttles are read at startup only
 ./scripts/35-app-passwords.sh      # one app password per account
-./scripts/37-room-passwords.sh     # app passwords for the booking service's rooms
 ./scripts/40-dns-sync.sh           # publish Stalwart's DKIM/DMARC/SRV records
 ./scripts/50-verify.sh             # end-to-end check
-python3 -I scripts/60-booking-test.py # end-to-end check of room booking
+python3 -I scripts/60-room-booking-test.py # how the rooms answer invitations
 ```
 
 Every script is safe to re-run. `30-` skips objects that already exist; `35-`
-and `37-` replace the app passwords they made earlier and leave others alone.
-`37-` is separate so that minting room passwords does not replace the ones
-configured in people's mail clients.
+replaces the app passwords it made earlier and leaves others alone.
+
+### Upgrading Stalwart
+
+A server first created by an earlier version does not get the permissions a
+new release adds to its default roles, and the web interface is a separate
+bundle. Going to 1.2.0 needed both:
+
+```bash
+docker compose pull stalwart
+# one start with the variable set, then remove it again
+STALWART_UPDATE_ROLE_PERMISSIONS=true docker compose up -d stalwart
+docker compose up -d --force-recreate stalwart
+./scripts/sw.sh create Action/UpdateApps   # web interface to 2.1.1
+```
+
+Without the first step, mail rules, junk lists and calendar settings are
+missing their permissions; the User, Group and System Administrator roles
+should gain `sysMailRule*`, `sysBlockedSender*`, `sysSafeSender*` and
+`sysCalendarSettings*`, and the administrator role `sysExchange*` as well. A
+lab built from scratch on 1.2.0 has them already.
 
 Firefox and Thunderbird use NSS rather than the macOS keychain, so
 `00-prereqs.sh` installs the CA into every profile it finds. That needs
@@ -180,50 +197,41 @@ mints app passwords as the administrator instead of as the user.
   Prometheus text format without authentication, after the
   `docker compose restart stalwart`; before it, the path returns 404.
 
-## Meeting rooms (prototype)
+## Meeting rooms
 
-Stalwart has only user and group accounts and no booking policy, so a room is
-an ordinary account and `booking/` answers its invitations. It is a Go
-service using only the standard library; the image build runs its unit tests.
-One worker per room polls the room's calendar over CalDAV every 5 seconds and
-sets the room's PARTSTAT, which makes Stalwart send the iTIP reply. Rooms and
-rules are in `booking/rooms.json`:
-
-- no overlap with the room's accepted bookings
-- at most 4 hours, at most 90 days ahead, within 07:00–20:00 Stockholm time
-- organizers on `lab.internal` or `other.lab.internal` only
-- no more people invited than the room seats (other rooms do not count)
-- recurring and all-day bookings are declined
+Since Stalwart 1.2.0 a room is a resource account (`Account/Resource`,
+`kind: room`) and the server answers its invitations itself. No service of the
+lab's own is involved. `scripts/30-stalwart-bootstrap.sh` creates both rooms
+with a capacity, a location and Bob as a delegate, which lets him see each room
+calendar and answer by hand.
 
 To book, invite the room by address like any attendee; Bulwark's address
-lookup finds it. Requests are handled one at a time per room, oldest first,
-so two requests for one slot cannot both be accepted.
+lookup finds it. `scripts/60-room-booking-test.py` exercises the behaviour.
 
-What the service works around, all observed on Stalwart 1.1:
+The booking policy is the resource's `booking` object, here left at its
+`Automatic` defaults:
 
-- **A decline reason never reaches the organizer.** A `COMMENT` on the room's
-  copy is not carried in the reply, so the service also mails the reason
-  from the room's address over submission.
-- **Answers survive changes.** Stalwart keeps the room's PARTSTAT when the
-  organizer moves a meeting. The service marks each answer with the version
-  it answered (`X-LAB-BOOKING`: sequence, start, end, number of people) and
-  judges an event again when that no longer matches.
-- **A declined room hears nothing more.** Stalwart sends no update or cancel
-  to an attendee who declined. The service deletes its declined copies; to
-  try again after a decline, the organizer has to ask the room again (remove
-  and re-add it, or reset its status).
-- **Cancelled copies stay.** A cancelled meeting stays in the room's
-  calendar with `STATUS:CANCELLED`; the service deletes it.
-- **The inbound throttle.** Stalwart's stock rule allows 25 messages an hour
-  per sender domain and recipient. Over the limit, some messages are queued
-  for retry and arrive late, after the meeting was moved or deleted; a room's
-  iTIP reply was dropped instead, and the service's decline mail refused
-  with `452`. The bootstrap exempts messages to and from `room-*` accounts
-  from that rule; the per-IP rule still applies.
+| Field | Default | Effect |
+|---|---|---|
+| `allowConflicts` | `false` | an overlap with an accepted booking is declined |
+| `allowRecurring` | `true` | recurring requests are answered like any other |
+| `allowExternal` | `false` | organizers outside the server are refused |
+| `bookingWindow` | unset | no limit on how far ahead a room can be booked |
+| `maxDuration` | unset | no limit on how long a booking may be |
 
-Organizers get two messages for a decline (Stalwart's reply and the reason)
-and one for an accept. Stalwart sends its iTIP reply even between accounts on
-the same server and has no setting to stop it.
+Verified in this lab: a free slot is accepted, an overlapping slot is
+declined, and the decline carries no reason the organizer can read.
+
+**Capacity is not a booking rule.** It is metadata shown to clients: six
+people invited to `room-b`, which seats four, were accepted. Exchange behaves
+the same way, so a room that is too small is the organizer's problem in both.
+The earlier Go prototype did enforce seats, along with a daily 07:00–20:00
+window and a refusal of all-day bookings, and the resource policy has no
+equivalent of any of the three. It does have `maxDuration` and
+`bookingWindow`, which the prototype lacked, both left unset here.
+Per-account working hours arrived in the same release
+(`x:CalendarSettings`) and may cover the daily window for a resource as well;
+that is untested.
 
 ## Two things that bite in the browser
 
@@ -249,20 +257,16 @@ the same server and has no setting to stop it.
 - Keycloak's `start --import-realm` uses `IGNORE_EXISTING`. Changing
   `keycloak/import/lab-realm.json` after the first run has no effect until the
   `postgres-data` volume is removed.
-- `app-passwords.txt`, `booking-passwords.txt` and the `.env` credentials are
-  lab values in plain text.
-- The booking service polls instead of using JMAP push, keeps no state
-  outside the room calendars, and has no room list or free/busy view in any
-  client.
+- `app-passwords.txt` and the `.env` credentials are lab values in plain text.
+- A room's capacity is not a booking rule; see "Meeting rooms".
 - The Prometheus endpoint has no authentication; anyone who can reach
   `mail.lab.internal` on 443 can read it.
 
 ## Licences
 
-This repository is licensed under the EUPL-1.2 (see `LICENSE` and `NOTICE`),
-the booking service included. The exception is `LICENSES/`, which holds the
-licences of the projects the lab runs and of what goes into the booking
-image, with an index in `LICENSES/README.md`.
+This repository is licensed under the EUPL-1.2 (see `LICENSE` and `NOTICE`).
+The exception is `LICENSES/`, which holds the licences of the projects the lab
+runs, with an index in `LICENSES/README.md`.
 
 ## Teardown
 

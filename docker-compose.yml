@@ -80,7 +80,7 @@ services:
         ipv4_address: 172.28.0.20
 
   stalwart:
-    image: stalwartlabs/stalwart:v1
+    image: stalwartlabs/stalwart:v1.2.0
     container_name: lab-stalwart
     restart: unless-stopped
     init: true
@@ -113,7 +113,7 @@ services:
         aliases: [mail.lab.internal]
 
   bulwark:
-    image: ghcr.io/bulwarkmail/webmail:latest
+    image: ghcr.io/bulwarkmail/webmail:1.21.3
     container_name: lab-bulwark
     restart: unless-stopped
     depends_on: [stalwart]
@@ -159,30 +159,6 @@ services:
       lab:
         ipv4_address: 172.28.0.50
         aliases: [sink.lab.internal]
-
-  # Answers meeting-room invitations for the room-* accounts. Talks CalDAV to
-  # Stalwart over the plain HTTP listener inside the lab network, and sends
-  # decline reasons over submission with STARTTLS. See booking/.
-  booking:
-    build: ./booking
-    image: lab-booking:dev
-    container_name: lab-booking
-    restart: unless-stopped
-    depends_on: [stalwart]
-    dns: [172.28.0.5]
-    environment:
-      STALWART_URL: http://mail.lab.internal:8080
-      SMTP_ADDR: mail.lab.internal:587
-      SMTP_CA: /certs/rootCA.pem
-      BOOKING_CONFIG: /etc/booking/rooms.json
-      BOOKING_PASSWORDS: /run/booking/passwords.txt
-    volumes:
-      - ./booking/rooms.json:/etc/booking/rooms.json:ro
-      - ./booking-passwords.txt:/run/booking/passwords.txt:ro
-      - ./certs/rootCA.pem:/certs/rootCA.pem:ro
-    networks:
-      lab:
-        ipv4_address: 172.28.0.60
 
   # Not started by `up`. Use scripts/stalwart-cli.sh.
   cli:

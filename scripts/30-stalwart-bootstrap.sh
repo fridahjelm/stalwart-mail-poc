@@ -120,11 +120,10 @@ fi
 SW update MtaOutboundStrategy --json '{"route":{"match":{"0":{"if":"is_local_domain(rcpt_domain)","then":"'"'"'local'"'"'"}},"else":"'"'"'sink'"'"'"}}'
 
 # A room receives every invitation, update and cancellation for it from the
-# whole domain, and its replies and decline reasons all come from one domain
-# too. The stock limit of 25 an hour per sender domain and recipient queues
-# the rest for retry, so answers arrive late or after the meeting was already
-# deleted, and the booking service's decline mail is refused outright. Read
-# at startup only.
+# whole domain, and its iTIP replies all go back to one domain too. The stock
+# limit of 25 an hour per sender domain and recipient queues the rest for
+# retry, so answers arrive late or after the meeting was already deleted.
+# Read at startup only.
 echo "==> no sender-to-recipient throttle for room-* accounts"
 THROTTLE_ID=$(pick_id MtaInboundThrottle description 'Sender address to recipient throttle')
 [ -z "$THROTTLE_ID" ] || SW update MtaInboundThrottle "$THROTTLE_ID" \
@@ -142,10 +141,19 @@ mk_account() { # <local part> <domain id>
 mk_account alice "$DOM_PRIMARY"
 mk_account bob   "$DOM_PRIMARY"
 mk_account carol "$DOM_OTHER"
-# Meeting rooms. Nobody signs in as them; the booking service answers their
-# invitations with the app passwords from 37-room-passwords.sh.
-mk_account room-a "$DOM_PRIMARY"
-mk_account room-b "$DOM_PRIMARY"
+# Meeting rooms are resource accounts: Stalwart answers their invitations
+# itself. Automatic booking declines an overlap with an accepted booking;
+# capacity and location are shown to clients but are not booking rules.
+# Bob is a delegate, so he sees both room calendars and can answer by hand.
+mk_room() { # <local part> <capacity> <location>
+	[ -n "$(pick_id Account name "$1")" ] && return 0
+	SW create Account/Resource --field name="$1" --field domainId="$DOM_PRIMARY" \
+		--field kind=room --field capacity="$2" --field location="$3" \
+		--field "description=${1/room-/Room }" \
+		--field "delegateIds={\"$(pick_id Account name bob)\":true}"
+}
+mk_room room-a 8 'Lab, 1st floor'
+mk_room room-b 4 'Lab, 2nd floor'
 
 echo "==> Keycloak OIDC directory"
 if [ -z "$(pick_id Directory description 'Keycloak lab realm')" ]; then
