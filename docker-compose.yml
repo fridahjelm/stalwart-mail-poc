@@ -8,6 +8,7 @@ networks:
 
 volumes:
   postgres-data:
+  nextcloud-data:
   stalwart-etc:
   stalwart-data:
   bulwark-data:
@@ -159,6 +160,78 @@ services:
       lab:
         ipv4_address: 172.28.0.50
         aliases: [sink.lab.internal]
+
+  # Nextcloud's cache and file locking. Nothing here needs to survive a
+  # restart, so persistence is off.
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: lab-valkey
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    networks:
+      lab:
+        ipv4_address: 172.28.0.72
+
+  nextcloud:
+    image: nextcloud:35.0.3-apache
+    container_name: lab-nextcloud
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    dns: [172.28.0.5]
+    environment:
+      POSTGRES_HOST: 172.28.0.10
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+      NEXTCLOUD_TRUSTED_DOMAINS: cloud.lab.internal
+      # Caddy terminates TLS, so Nextcloud has to be told the public scheme
+      # and host or it writes http:// links and refuses the WOPI callbacks.
+      OVERWRITEPROTOCOL: https
+      OVERWRITEHOST: cloud.lab.internal
+      OVERWRITECLIURL: https://cloud.lab.internal
+      TRUSTED_PROXIES: 172.28.0.40
+      REDIS_HOST: 172.28.0.72
+      PHP_MEMORY_LIMIT: 512M
+    volumes:
+      - nextcloud-data:/var/www/html
+      - ./certs:/certs:ro
+      - ./nextcloud/php/lab-ca.ini:/usr/local/etc/php/conf.d/lab-ca.ini:ro
+    networks:
+      lab:
+        ipv4_address: 172.28.0.70
+
+  # One editor for two WOPI hosts: Bulwark (mail attachments, read-only) and
+  # Nextcloud (files, editable). collabora/code publishes no version tags, so
+  # it is pinned by digest.
+  collabora:
+    image: collabora/code@sha256:a2f5d4e88addd46033d8440f7a13b82f7e6fe444bf8c6b5a3eadc789f0b5342b
+    container_name: lab-collabora
+    restart: unless-stopped
+    depends_on: [dns]
+    dns: [172.28.0.5]
+    cap_add: [MKNOD]
+    environment:
+      aliasgroup1: https://webmail.lab.internal:443
+      aliasgroup2: https://cloud.lab.internal:443
+      dictionaries: en_GB en_US sv
+    # These are argv rather than `extra_params`, which the entrypoint expands
+    # through the shell: a value with a space in it is split there, and the
+    # content security policy silently kept only its first host, so the editor
+    # loaded in Bulwark's frame and was blocked in Nextcloud's.
+    command:
+      - "--o:ssl.enable=false"
+      - "--o:ssl.termination=true"
+      - "--o:net.content_security_policy=frame-ancestors webmail.lab.internal:443 cloud.lab.internal:443;"
+      - "--o:storage.ssl.ca_file_path=/certs/rootCA.pem"
+    volumes:
+      - ./certs:/certs:ro
+    networks:
+      lab:
+        ipv4_address: 172.28.0.71
 
   # Not started by `up`. Use scripts/stalwart-cli.sh.
   cli:

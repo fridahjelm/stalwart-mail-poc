@@ -14,5 +14,7 @@ $TTL 60
 ns      IN A    172.28.0.5
 kc      IN A    172.28.0.40
 webmail IN A    172.28.0.40
+cloud   IN A    172.28.0.40
+office  IN A    172.28.0.40
 mail    IN A    172.28.0.30
 sink    IN A    172.28.0.50

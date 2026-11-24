@@ -19,9 +19,13 @@ which Stalwart verifies itself. See [Authentication paths](#authentication-paths
 | `lab-caddy` | `caddy:2-alpine` | 172.28.0.40 | `127.0.0.1:443` |
 | `lab-bulwark` | `ghcr.io/bulwarkmail/webmail:1.21.3` | 172.28.0.41 | via Caddy |
 | `lab-mailpit` | `axllent/mailpit` | 172.28.0.50 | `127.0.0.1:8025` |
+| `lab-nextcloud` | `nextcloud:35.0.3-apache` | 172.28.0.70 | via Caddy |
+| `lab-collabora` | `collabora/code` (digest) | 172.28.0.71 | via Caddy |
+| `lab-valkey` | `valkey/valkey:8-alpine` | 172.28.0.72 | no |
 
 Names: `kc.lab.internal` (Keycloak), `mail.lab.internal` (Stalwart),
-`webmail.lab.internal` (Bulwark), `sink.lab.internal` (Mailpit).
+`webmail.lab.internal` (Bulwark), `sink.lab.internal` (Mailpit),
+`cloud.lab.internal` (Nextcloud), `office.lab.internal` (Collabora).
 Mail domains: `lab.internal` and `other.lab.internal`.
 Users: `alice@lab.internal`, `bob@lab.internal`, `carol@other.lab.internal`.
 Meeting rooms: `room-a@lab.internal` (8 seats, 1st floor) and
@@ -76,8 +80,12 @@ is given the lab CA rather than having verification turned off:
 docker compose restart stalwart    # listeners, the outbound route, directory queries, metrics and throttles are read at startup only
 ./scripts/35-app-passwords.sh      # one app password per account
 ./scripts/40-dns-sync.sh           # publish Stalwart's DKIM/DMARC/SRV records
+./scripts/38-add-realm-clients.sh  # realm clients the running realm is missing
 ./scripts/50-verify.sh             # end-to-end check
 python3 -I scripts/60-room-booking-test.py # how the rooms answer invitations
+./scripts/70-nextcloud-bootstrap.sh # database, lab CA, Collabora, SSO, Mail app
+./scripts/75-nextcloud-mail.sh     # mail accounts, once users have signed in once
+python3 -I scripts/80-office-test.py # the office integration, short of the click
 ```
 
 Every script is safe to re-run. `30-` skips objects that already exist; `35-`
@@ -233,6 +241,97 @@ Per-account working hours arrived in the same release
 (`x:CalendarSettings`) and may cover the daily window for a resource as well;
 that is untested.
 
+## Nextcloud and Collabora
+
+Collabora Online is one editor serving two WOPI hosts. Bulwark is a WOPI host
+in its own right, so a `.docx` attachment opens in Collabora from the message
+view with no Nextcloud involved; Nextcloud is the second host, for files it
+stores itself.
+
+| Setting | Where | Value |
+|---|---|---|
+| `wopiClientUrl` | Bulwark, `admin/config.json` | `https://office.lab.internal` |
+| `wopiHostUrl` | Bulwark, `admin/config.json` | `https://webmail.lab.internal` |
+| `wopi_url`, `public_wopi_url` | Nextcloud `richdocuments` | `https://office.lab.internal` |
+| `aliasgroup1`, `aliasgroup2` | Collabora | the two host URLs |
+
+**Attachments open read-only.** Bulwark's WOPI routes carry both a fixed
+read-only path and a writable one driven by the host's payload, and a mail
+attachment takes the first. Editing means saving the file to Bulwark's Files,
+which Stalwart stores, where it opens writable.
+
+Three things make the editor work behind the proxy, and the upstream reports
+([#1130](https://github.com/bulwarkmail/webmail/issues/1130),
+[#1518](https://github.com/bulwarkmail/webmail/issues/1518)) are about getting
+them wrong. `office.lab.internal` resolves to Caddy from inside the lab network
+and from the browser, so the discovery `urlsrc` the browser is sent matches the
+origin the content security policy allows. Collabora runs with
+`ssl.enable=false` and `ssl.termination=true`, because Caddy holds the
+certificate. And its content security policy names both hosts as frame
+ancestors, since each one frames the editor.
+
+Those options are passed as `command:` argv, not in the `extra_params`
+environment variable, which the entrypoint expands through the shell. A value
+containing a space is split there: `frame-ancestors webmail.lab.internal:443
+cloud.lab.internal:443` silently became just the first host, so the editor
+opened from Bulwark and was refused in Nextcloud's frame, with nothing logged
+on either side. `scripts/80-office-test.py` therefore reads the policy
+Collabora actually sends rather than the setting it was given.
+
+Collabora fetches the file back from whichever host launched it, over HTTPS
+with the lab certificate, so it gets the CA through
+`storage.ssl.ca_file_path`. Nextcloud keeps two stores and needs both
+filled, for different callers. Its HTTP client, which fetches the OpenID
+Connect discovery document, trusts the CA through `occ
+security:certificates:import` — enough on its own, though it writes no
+`data/ca-bundle.crt` where the documentation implies and leaves `curl` inside
+the container failing, which makes it look ineffective. PHP's own TLS streams,
+which the Mail app uses to reach Stalwart, consult neither that store nor the
+system one: they read `openssl.cafile`, set in
+`nextcloud/php/lab-ca.ini` to the bundle `scripts/15-ca-bundle.sh` builds.
+Without it, IMAP fails with "Error connecting to mail server" and nothing
+reaches Stalwart at all. That makes six runtimes in this lab with their own notion of which
+certificates to trust.
+
+The image has no shell, so nothing can be run inside the Collabora container;
+`scripts/80-office-test.py` checks its settings from the outside and resolves
+the names from another container on the same resolver.
+
+### Nextcloud
+
+Sign-in needs one thing besides the CA: `allow_local_remote_servers` must be
+on. Nextcloud's SSRF guard refuses to connect to a private address, and every
+service here is on `172.28.0.0/24`, so discovery fails with *"Host
+kc.lab.internal was not connected to because it violates local access rules"*.
+The browser shows the same "could not reach the OpenID Connect provider" as a
+certificate failure does, and only `data/nextcloud.log` distinguishes them.
+
+Two things make this harder to diagnose than it should be. The provider's
+discovery document is cached, so after a configuration change the sign-in can
+keep working, or keep failing, for reasons that no longer apply; flush it with
+`docker exec lab-valkey valkey-cli flushall` before concluding anything. And
+`scripts/80-office-test.py` flushes the cache itself for that reason.
+
+**Nextcloud Mail cannot open an attachment in Collabora**, and no
+configuration changes that. A mail attachment is not a file in Nextcloud's
+file system, so it has no identity to hand the editor;
+[nextcloud/mail#12988](https://github.com/nextcloud/mail/issues/12988) shows
+the attempt failing with "Failed to generate token for file", and the request
+has been open upstream for years. From Nextcloud the route is to save the
+attachment to Files and open it there. Bulwark does not have this limitation,
+because it is a WOPI host for its own attachments, which is why the lab opens
+them from there.
+
+Users come from Keycloak through the `user_oidc` app, so an account exists in
+Nextcloud only after its first sign-in. `scripts/75-nextcloud-mail.sh` adds a
+Mail account against Stalwart for each user that has signed in and skips the
+rest, so it is meant to be re-run.
+
+Nextcloud's calendar and contacts apps are disabled on purpose. Stalwart stays
+authoritative for CalDAV and CardDAV, which keeps the room resources working
+and avoids two sources for the same calendar. The `.well-known` redirects are
+still served so that a client probing Nextcloud gets an answer.
+
 ## Two things that bite in the browser
 
 - The webmail is served from `webmail.lab.internal` and the browser calls JMAP
@@ -261,6 +360,14 @@ that is untested.
 - A room's capacity is not a booking rule; see "Meeting rooms".
 - The Prometheus endpoint has no authentication; anyone who can reach
   `mail.lab.internal` on 443 can read it.
+- Nextcloud's own files and Stalwart's are separate stores with separate
+  quotas. Nothing synchronises them.
+- Ten containers on one Docker host. Collabora is the heavy one; give Docker
+  more than 8 GB if it starts to swap.
+- `allow_local_remote_servers` is on in Nextcloud, which disables its guard
+  against server-side requests to private addresses. A lab on a private
+  network cannot avoid it. A real deployment would reach its identity provider
+  under a publicly resolvable name and leave the guard alone.
 
 ## Licences
 

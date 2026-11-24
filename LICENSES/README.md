@@ -22,6 +22,9 @@ production deployment or for publishing an image built here.
 | Caddy | 2.11.9 | `Apache-2.0` | [caddy/](caddy/) | `caddyserver/caddy` @ `v2.11.9` |
 | CoreDNS | 1.12.0 | `Apache-2.0` | [coredns/](coredns/) | `coredns/coredns` @ `v1.12.0` |
 | Mailpit (lab only) | 1.29.2 | `MIT` | [mailpit/](mailpit/) | `axllent/mailpit` @ `v1.29.2` |
+| Nextcloud server | 35.0.3 | `AGPL-3.0-only` | [nextcloud/](nextcloud/) | `nextcloud/server` @ `v35.0.3` |
+| Collabora Online | 26.04.6.2 | `MPL-2.0` | [collabora/](collabora/) | `CollaboraOnline/online` @ `5f933cc` |
+| Valkey | 8.1.12 | `BSD-3-Clause` | [valkey/](valkey/) | `valkey-io/valkey` @ `8.1` |
 
 Notes:
 
@@ -36,6 +39,15 @@ Notes:
   of the project it was forked from and credits bundled third-party material:
   Twemoji artwork (CC-BY-4.0), three fonts (OFL-1.1) and airport time zone
   data (MIT).
-- The other images (Keycloak, PostgreSQL, Caddy, Mailpit) contain operating
-  system packages of their own, under their publishers' terms; they are not
-  listed here.
+- **Collabora Online**'s `COPYING` only points at the MPL-2.0 rather than
+  reproducing it, so the canonical text from the SPDX list (v3.29.0) is
+  included beside it. The project has no release tag for the version the
+  image carries, so the licence was taken from the default branch; the image
+  itself is pinned by digest in `docker-compose.yml`.
+- **Nextcloud** is AGPL-3.0 for the server. The apps the lab enables
+  (`richdocuments`, `user_oidc`, `mail`) are separate AGPL-3.0 projects of
+  the same organisation, installed at run time from its app store rather
+  than redistributed here.
+- The other images (Keycloak, PostgreSQL, Caddy, Mailpit, Valkey) contain
+  operating system packages of their own, under their publishers' terms; they
+  are not listed here.

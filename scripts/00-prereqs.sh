@@ -3,7 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-NAMES=(kc.lab.internal mail.lab.internal webmail.lab.internal ns.lab.internal sink.lab.internal)
+NAMES=(kc.lab.internal mail.lab.internal webmail.lab.internal ns.lab.internal
+	sink.lab.internal cloud.lab.internal office.lab.internal)
 
 test -f certs/rootCA.pem || { echo "run scripts/10-certs.sh first"; exit 1; }
 

@@ -56,3 +56,20 @@ https://mail.lab.internal {
 		}
 	}
 }
+
+https://cloud.lab.internal {
+	import labtls
+	# Nextcloud's service discovery for CalDAV and CardDAV clients, which the
+	# lab does not use: Stalwart stays authoritative for calendars and
+	# contacts. Kept so clients that probe get an answer rather than a 404.
+	redir /.well-known/carddav /remote.php/dav 301
+	redir /.well-known/caldav /remote.php/dav 301
+	reverse_proxy http://172.28.0.70:80
+}
+
+https://office.lab.internal {
+	import labtls
+	# Collabora runs with TLS off behind this proxy; the websocket upgrade is
+	# handled by reverse_proxy on its own.
+	reverse_proxy http://172.28.0.71:9980
+}
